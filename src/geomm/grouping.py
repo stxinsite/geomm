@@ -94,68 +94,42 @@ def group_pair(coords, unitcell_side_lengths, member_a_idxs, member_b_idxs):
     return grouped_coords
 
 
-def _rec_apply(func, starter, values):
+def _rec_apply(func, starter_args, values):     
     """A helper wrapper function that is similar to a reduce/fold that
     recursively applies the function to the values except it
     aggregates the 'values' as inputs at each step. This is to support
     the `group_complex` function.
-
     Parameters
     ----------
-
     func : function
         Function to be applied to inputs. Should have signature of
-        func(starter_args, value_a, value_b)
-
+        func(starter_args, value_a, value_b) -> (result_1, result_2, ...)
+        Even if only one returned value, results should still be wrapped in
+        a tuple.
     starter_args : tuple
         Arguments as a tuple that will be passed into func as `starter_args`.
-
     values : list
         The values that will be iteratively aggregated and passed as
         `value_a` and `value_b` to func.
-
-
-
     like:
-
     next_thing = func(
-         starter,
+         starter_args,
          values[0],
          values[1],
     )
-
     Then:
-
     next_thing = func(
             next_thing,
-            values[0] + values[1],
+            values[0] + values[1], 
             values[2]
     )
-
     And so on.
-
     """
-
-    def ensure_tuple(val):
-
-        try:
-            vals = tuple(val)
-        except TypeError:
-            vals = (val,)
-
-        return vals
-
-    # wrap the function to ensure that it always returns a tuple
-    def wrapped_func(*args):
-
-        return ensure_tuple(
-            func(*args)
-        )
 
 
     # helper to check if something is iterable
     def is_iterable(thing):
-
+        
         try:
             iter(thing)
         except TypeError:
@@ -176,7 +150,7 @@ def _rec_apply(func, starter, values):
         # recursion ascent
         if type(sel_a) is int:
 
-            return wrapped_func(
+            return func(
                 sel_lut[sel_a],
                 sel_lut[sel_b],
                 *starter_args,
@@ -195,10 +169,8 @@ def _rec_apply(func, starter, values):
             )
 
             # recursive ascent here
-
             # aggregate the compound sel_a and pass in the results of
             # its evaluation i.e. `next_args`
-
             # ensure that it is iterable for aggregation
             if not is_iterable(sel_a[0]):
 
@@ -213,23 +185,24 @@ def _rec_apply(func, starter, values):
 
             # call the wrapped function with this new sel_a collection
             # and transformed arguemtns pass up for the ascent
-            return wrapped_func(
+            return func(
                 new_sel_a_value,
                 sel_lut[sel_b],
                 *next_args,
             )
 
+
     groupings = ft.reduce(
         lambda a, b: (a, b),
         range(len(values)),
     )
-
+    
     final = rec_func(
         *groupings,
         values,
         *starter_args,
     )
-
+    
     return final
 
 def group_complex(
@@ -239,44 +212,34 @@ def group_complex(
 ):
     """Group a 'complex' of selected components by iteratively applying
     `group_pair`.
-
     The order of the `complex_selection_idxs` matters. The first two
     elements will be grouped using `group_pair` and then aggregated
     into a single selection and then grouped against the third element
     and so on.
-
     Parameters
     ----------
-
     coords : arraylike
-        The coordinate array of the particles you will be
-        transforming.
-
-    unitcell_side_lengths : arraylike of shape (3)
-        The lengths of the sides of a rectangular unitcell.
-
-    complex_selection_idxs : list of arraylike of int of rank 1
-
-        A list of selections on coords. Each element is a single
+         The coordinate array of the particles you will be
+         transforming.
+   unitcell_side_lengths : arraylike of shape (3)
+         The lengths of the sides of a rectangular unitcell.
+         complex_selection_idxs : list of arraylike of int of rank 1
+         A list of selections on coords. Each element is a single
         selection. Each selection is an arraylike of indices (in
         order) that define the selection.
-
     Returns
     -------
-
     grouped_coords : arraylike
         Transformed coordinates.
-
-    Warnings
+    Warnings                                                                                                    
     --------
-
     This is a recursive algorithm and thus may reach recursion limits
     in extreme cases.
-
     """
 
-    # wrap group pair so that it has the correct function signature
 
+    # wrap group pair so that it has the correct function signature
+    
     def wrapped_group_pair(
             member_a_idxs,
             member_b_idxs,
@@ -284,15 +247,14 @@ def group_complex(
             coords,
             unitcell_side_lengths,
     ):
+        wrapped_coords = group_pair(coords, unitcell_side_lengths, member_a_idxs, member_b_idxs)
 
+        return wrapped_coords, unitcell_side_lengths
 
-        return group_pair(coords, unitcell_side_lengths, member_a_idxs, member_b_idxs)
-
-    grouped_coords = _rec_apply(
-        group_pair,
-        coords,
+    grouped_coords, _ = _rec_apply(
+        wrapped_group_pair,
+        (coords, unitcell_side_lengths),
         complex_selection_idxs,
     )
 
     return grouped_coords
-
